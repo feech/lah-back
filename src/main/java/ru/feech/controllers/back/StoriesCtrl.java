@@ -131,7 +131,7 @@ public class StoriesCtrl {
         }
         Document snippet = new Document("snippet",
                 new Document()
-                        .append("story_id", new ObjectId(story_id))
+                        .append("♦", new ObjectId(story_id))
                         .append("num", number)
                         .append("from", from)
                         .append("to", to)

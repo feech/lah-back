@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import ru.feech.decorators.SnippetsDecorator;
 
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Created by Kirill on 6/16/2016.
@@ -22,31 +23,38 @@ public class SnippetsCtrl {
 
     // snippets by included words
     @RequestMapping(method = RequestMethod.GET)
-    public Iterable<Map<String, Object>> search_snippets(@RequestParam(value = "words", required = false, defaultValue = "") String words,
-                                                         @RequestParam(value = "page", defaultValue = "0") Integer page,
-                                                         @RequestParam(value = "story_id", required = false, defaultValue = "") String story_id) {
+    public Map<String, Object> search_snippets(@RequestParam(value = "words", required = false, defaultValue = "") String words,
+                                               @RequestParam(value = "page", defaultValue = "0") Long _page) {
 
-        if(words.isEmpty() && story_id.isEmpty())
-        {
-            throw new RuntimeException("story or pattern are required");
-        }
-        if (!story_id.isEmpty())
-        {
-            return database.getCollection("snippets")
-                    .find(new Document("snippet.story_id", new ObjectId(story_id)))
-                    .sort(new Document("snippet.num", 1))
-                    .limit(25)
-                    .map(SnippetsDecorator::index);
+        if (words.isEmpty()) {
+            throw new RuntimeException("pattern are required");
         }
 
-        return database.getCollection("snippets")
+        Long count = database.getCollection("snippets")
+                .count(new Document("$text",
+                        new Document("$search", words)));
+
+        Long last_page = (count + 24) / 25 - 1;
+        Long page = _page;
+        if (page > last_page) {
+            page = last_page;
+        }
+
+        Map<String, Object> result = new TreeMap<>();
+        Iterable<Map<String, Object>> snippets = database.getCollection("snippets")
                 .find(new Document("$text",
                         new Document("$search", words)))
+                .skip((int) (page*25))
                 .limit(25)
                 .map(SnippetsDecorator::index);
+
+        result.put("pages", last_page + 1);
+        result.put("page", page);
+        result.put("snippets", snippets);
+        return result;
     }
 
-    // snippet's sound
+    // snippet's info
     @RequestMapping(method = RequestMethod.GET, path = "/{id}")
     public Map<String, Object> get_sound(@PathVariable("id") String id) {
         return database.getCollection("snippets")
@@ -56,12 +64,13 @@ public class SnippetsCtrl {
                 .first();
     }
 
-    @RequestMapping(method = RequestMethod.GET, path = "/b/{id}", produces = "audio/mpeg")
+    // snippet's sound
+    @RequestMapping(method = RequestMethod.GET, path = "/{id}/sound", produces = "audio/mpeg")
     public byte[] get_soundb(@PathVariable("id") String id) {
         return database.getCollection("snippets")
                 .find(new Document("_id",
                         new ObjectId(id)))
-                .map(d-> d.get("snippet", Document.class)
+                .map(d -> d.get("snippet", Document.class)
                         .get("mp3", Binary.class))
                 .first().getData();
     }

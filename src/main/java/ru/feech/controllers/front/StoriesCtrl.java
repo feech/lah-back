@@ -17,9 +17,12 @@ import ru.feech.decorators.StoriesDecorator;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.logging.Logger;
 
+import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Filters.regex;
+import static com.mongodb.client.model.Sorts.ascending;
 
 
 /**
@@ -81,7 +84,7 @@ public class StoriesCtrl {
                 .map(StoriesDecorator::index);
     }
 
-    // sound of story
+    // story's params
     @RequestMapping(method = RequestMethod.GET, path = "/{story_id}")
     public Map<String, Object> story(@PathVariable("story_id") String story_id) {
         return database.getCollection("stories")
@@ -106,14 +109,32 @@ public class StoriesCtrl {
 
 
     // snippet for story
+    // on given page [0..)
     @RequestMapping(method = RequestMethod.GET, path = "/{story_id}/snippets")
-    public Iterable<Map<String, Object>> story_snippet(@PathVariable("story_id") String story_id,
-                                                       @RequestParam(value = "page", required = false) Integer page) {
+    public Map<String, Object> story_snippet(@PathVariable("story_id") String story_id,
+                                                       @RequestParam(value = "page", required = false, defaultValue = "0") Long _page) {
+        Long count = database.getCollection("snippets")
+                .count(new Document("snippet.story_id", new ObjectId(story_id)));
 
-        return database.getCollection("snippets")
-                .find(new Document("snippet.story_id", new ObjectId(story_id)))
+        Long last_page = (count+24)/25-1;
+        Long page = _page;
+        if(page>last_page)
+        {
+            page=last_page;
+        }
+
+        Map<String, Object> result = new TreeMap<>();
+        Iterable<Map<String, Object>> snippets = database.getCollection("snippets")
+                .find(eq("snippet.story_id", new ObjectId(story_id)))
+                .sort(ascending("snippet.num"))
+                .skip((int) (page*25))
                 .limit(25)
                 .map(SnippetsDecorator::index);
+
+        result.put("pages", last_page+1);
+        result.put("page", page);
+        result.put("snippets", snippets);
+        return result;
     }
 
 
